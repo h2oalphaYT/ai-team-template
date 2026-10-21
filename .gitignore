@@ -1,0 +1,16 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Personal Claude Code files (not shared with the team)
+CLAUDE.local.md
+.claude/settings.local.json
+
+# Tooling
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db

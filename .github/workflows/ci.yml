@@ -1,0 +1,54 @@
+name: Validate template
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Read-only token; this workflow needs no secrets and never runs with elevated permissions.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Validator self-test
+        run: python3 scripts/validate_template.py --self-test
+
+      - name: Validate agents, skills, links, settings and secrets
+        run: python3 scripts/validate_template.py
+
+      - name: Lint shell scripts
+        run: |
+          bash -n scripts/install-team.sh
+          if command -v shellcheck >/dev/null; then shellcheck scripts/install-team.sh; else echo "shellcheck not installed; syntax check only"; fi
+
+      - name: Installer smoke test (fresh install, re-run, update, existing CLAUDE.md)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          git init -q "$tmp/repo"
+          scripts/install-team.sh "$tmp/repo"
+          python3 scripts/validate_template.py --root "$tmp/repo" --require-all
+          scripts/install-team.sh "$tmp/repo" | tee "$tmp/second.txt"
+          grep -q "created=0 updated=0 skipped=0" "$tmp/second.txt"
+          echo "project fact" >> "$tmp/repo/.claude/PROJECT.md"
+          scripts/install-team.sh --update "$tmp/repo"
+          grep -q "project fact" "$tmp/repo/.claude/PROJECT.md"
+          git init -q "$tmp/existing"
+          echo "# My project rules" > "$tmp/existing/CLAUDE.md"
+          scripts/install-team.sh "$tmp/existing"
+          test "$(cat "$tmp/existing/CLAUDE.md")" = "# My project rules"
+          test -f "$tmp/existing/CLAUDE.ai-team.md"
